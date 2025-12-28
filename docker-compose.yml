@@ -1,0 +1,71 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:7
+    container_name: simple-vault-db
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=vault
+      - MONGO_INITDB_ROOT_PASSWORD=vault
+      - MONGO_INITDB_DATABASE=vault
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    restart: unless-stopped
+    networks:
+      - vault-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    container_name: simple-vault-api
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - MONGODB_URI=mongodb://vault:vault@mongodb:27017/vault?authSource=admin
+      - DB_HOST=mongodb
+      - DB_USER=vault
+      - DB_PASSWORD=vault
+      - DB_NAME=vault
+      - DB_PORT=27017
+      - KUBECONFIG=/root/.kube/config
+    volumes:
+      # Mount kubeconfig if running outside Kubernetes
+      - ${HOME}/.kube/config:/root/.kube/config:ro
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - vault-network
+
+  ui:
+    build:
+      context: ./ui
+      dockerfile: Dockerfile
+    container_name: simple-vault-ui
+    ports:
+      - "3000:80"
+    environment:
+      - VITE_API_URL=http://localhost:8080/api/v1
+    depends_on:
+      - api
+    restart: unless-stopped
+    networks:
+      - vault-network
+
+volumes:
+  mongodb_data:
+
+networks:
+  vault-network:
+    driver: bridge
+
