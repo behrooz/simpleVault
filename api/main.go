@@ -41,7 +41,6 @@ var usersCollection *mongo.Collection
 func initDB() error {
 	// Get MongoDB connection string from environment
 	uri := os.Getenv("MONGODB_URI")
-	uri = "mongodb://root:secret123@212.64.215.155:32169"
 	if uri == "" {
 		// Build URI from individual components
 		host := getEnv("DB_HOST", "localhost")
