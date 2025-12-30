@@ -2,12 +2,9 @@ package main
 
 import (
 	"context"
-	"encoding/base64"
-	"encoding/json"
 	"log"
 	"net/http"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -16,6 +13,8 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
+
+	"simple-vault/api/helpers"
 )
 
 type User struct {
@@ -42,6 +41,7 @@ var usersCollection *mongo.Collection
 func initDB() error {
 	// Get MongoDB connection string from environment
 	uri := os.Getenv("MONGODB_URI")
+	uri = "mongodb://root:secret123@212.64.215.155:32169"
 	if uri == "" {
 		// Build URI from individual components
 		host := getEnv("DB_HOST", "localhost")
@@ -113,7 +113,7 @@ func getEnv(key, defaultValue string) string {
 
 // getUserIDFromToken extracts userID from JWT token by:
 // 1. Getting Authorization header
-// 2. Decoding JWT to get username (without verification)
+// 2. Validating token with auth service to get username
 // 3. Querying users collection to get user's _id
 func getUserIDFromToken(c *gin.Context) (string, error) {
 	// Get Authorization header
@@ -122,43 +122,10 @@ func getUserIDFromToken(c *gin.Context) (string, error) {
 		return "", gin.Error{Err: nil, Type: gin.ErrorTypePublic, Meta: "Authorization header is required"}
 	}
 
-	// Remove "Bearer " prefix if present
-	tokenString := strings.TrimPrefix(authHeader, "Bearer ")
-	tokenString = strings.TrimSpace(tokenString)
-
-	// Parse JWT token without verification - just extract username
-	// Split token into parts (header.payload.signature)
-	parts := strings.Split(tokenString, ".")
-	if len(parts) != 3 {
-		return "", gin.Error{Err: nil, Type: gin.ErrorTypePublic, Meta: "Invalid token format"}
-	}
-
-	// Decode the payload (second part) - JWT uses base64url encoding
-	payload := parts[1]
-	// Add padding if needed for base64 decoding
-	if len(payload)%4 != 0 {
-		payload += strings.Repeat("=", 4-len(payload)%4)
-	}
-
-	// Decode base64 (JWT uses base64url, but Go's base64.URLEncoding handles it)
-	decoded, err := base64.URLEncoding.WithPadding(base64.NoPadding).DecodeString(parts[1])
+	// Validate token with auth service and get username
+	username, err := helpers.ValidateToken(authHeader)
 	if err != nil {
-		// Try with standard base64 if URL encoding fails
-		decoded, err = base64.StdEncoding.DecodeString(payload)
-		if err != nil {
-			return "", gin.Error{Err: err, Type: gin.ErrorTypePublic, Meta: "Failed to decode token"}
-		}
-	}
-
-	// Parse JSON to get username
-	var claims map[string]interface{}
-	if err = json.Unmarshal(decoded, &claims); err != nil {
-		return "", gin.Error{Err: err, Type: gin.ErrorTypePublic, Meta: "Failed to parse token claims"}
-	}
-
-	username, ok := claims["username"].(string)
-	if !ok || username == "" {
-		return "", gin.Error{Err: nil, Type: gin.ErrorTypePublic, Meta: "Username not found in token"}
+		return "", gin.Error{Err: err, Type: gin.ErrorTypePublic, Meta: err.Error()}
 	}
 
 	// Query users collection to get user's _id from MongoDB
@@ -211,10 +178,16 @@ func main() {
 
 	// Custom CORS middleware to ensure headers are always set
 	r.Use(func(c *gin.Context) {
-		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		origin := c.GetHeader("Origin")
+		if origin == "" {
+			origin = "*"
+		}
+
+		c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
 		c.Writer.Header().Set("Access-Control-Allow-Credentials", "false")
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With")
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, DELETE, PATCH")
+		c.Writer.Header().Set("Access-Control-Max-Age", "1728000")
 
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(http.StatusNoContent)
