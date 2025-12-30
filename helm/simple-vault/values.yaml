@@ -10,7 +10,7 @@ global:
 api:
   enabled: true
   image:
-    repository: simple-vault-api
+    repository: 212.64.215.155:30835/simple-vault-api
     tag: latest
     pullPolicy: IfNotPresent
   
@@ -29,87 +29,22 @@ api:
       cpu: 100m
       memory: 128Mi
   
-  livenessProbe:
-    httpGet:
-      path: /api/v1/secrets
-      port: 8080
-    initialDelaySeconds: 30
-    periodSeconds: 10
-    timeoutSeconds: 5
-    failureThreshold: 3
+  livenessProbe: {}
   
-  readinessProbe:
-    httpGet:
-      path: /api/v1/secrets
-      port: 8080
-    initialDelaySeconds: 10
-    periodSeconds: 5
-    timeoutSeconds: 3
-    failureThreshold: 3
+  readinessProbe: {}
   
   # Environment variables
   env:
     PORT: "8080"
     # MongoDB configuration - use MONGODB_URI or individual components
-    MONGODB_URI: ""  # If set, this takes precedence
-    DB_HOST: "mongodb"
-    DB_PORT: "27017"
-    DB_USER: "vault"
-    DB_PASSWORD: "vault"
+    MONGODB_URI: ""  # If set, this takes precedence (e.g., "mongodb://root:secret123@mongodb.mongodb.svc:27017/")
+    DB_HOST: ""
+    DB_PORT: ""
+    DB_USER: ""
+    DB_PASSWORD: ""
     DB_NAME: "vault"
     # Auth service URL
-    AUTH_SERVICE_URL: "http://192.168.1.4:8083"
-  
-  # Node selector, tolerations, and affinity
-  nodeSelector: {}
-  tolerations: []
-  affinity: {}
-
-# UI Service Configuration
-ui:
-  enabled: true
-  image:
-    repository: simple-vault-ui
-    tag: latest
-    pullPolicy: IfNotPresent
-  
-  replicaCount: 2
-  
-  service:
-    type: ClusterIP
-    port: 80
-    targetPort: 80
-  
-  resources:
-    limits:
-      cpu: 200m
-      memory: 256Mi
-    requests:
-      cpu: 50m
-      memory: 64Mi
-  
-  livenessProbe:
-    httpGet:
-      path: /
-      port: 80
-    initialDelaySeconds: 30
-    periodSeconds: 10
-    timeoutSeconds: 5
-    failureThreshold: 3
-  
-  readinessProbe:
-    httpGet:
-      path: /
-      port: 80
-    initialDelaySeconds: 10
-    periodSeconds: 5
-    timeoutSeconds: 3
-    failureThreshold: 3
-  
-  # Build-time environment variable for API URL
-  # This should be set during build, but we can also configure it here
-  buildEnv:
-    VITE_API_URL: "http://simple-vault-api:8080/api/v1"
+    AUTH_SERVICE_URL: "http://authservice:8083"
   
   # Node selector, tolerations, and affinity
   nodeSelector: {}
@@ -157,9 +92,6 @@ ingress:
   hosts:
     - host: simple-vault.local
       paths:
-        - path: /
-          pathType: Prefix
-          service: ui
         - path: /api
           pathType: Prefix
           service: api
@@ -174,13 +106,15 @@ serviceAccount:
   annotations: {}
   name: ""
 
-# Security Context
+# Security Context (container-level)
 securityContext:
   runAsNonRoot: true
   runAsUser: 1000
-  fsGroup: 1000
+  # Note: fsGroup belongs in podSecurityContext, not here
 
-# Pod Security Context
+# Pod Security Context (pod-level)
 podSecurityContext:
   fsGroup: 1000
+  runAsNonRoot: true
+  runAsUser: 1000
 

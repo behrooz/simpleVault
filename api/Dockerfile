@@ -1,9 +1,19 @@
-FROM golang:1.23-alpine AS builder
+# Build stage
+FROM golang:latest AS builder
 
+# Set working directory
 WORKDIR /app
+
+# Install git (needed for some Go dependencies)
+RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
+
+# Enable automatic toolchain download for Go 1.24+
+ENV GOTOOLCHAIN=auto
 
 # Copy go mod files
 COPY go.mod go.sum ./
+
+# Download dependencies
 RUN go mod download
 
 # Copy source code
@@ -15,6 +25,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o main .
 # Final stage
 FROM alpine:latest
 
+# Install ca-certificates for HTTPS requests
 RUN apk --no-cache add ca-certificates
 
 WORKDIR /root/
@@ -25,6 +36,5 @@ COPY --from=builder /app/main .
 # Expose port
 EXPOSE 8080
 
-# Run the binary
+# Run the application
 CMD ["./main"]
-

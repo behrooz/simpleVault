@@ -1,6 +1,6 @@
 # Simple Vault Helm Chart
 
-This Helm chart deploys the Simple Vault application on a Kubernetes cluster.
+This Helm chart deploys the Simple Vault API service on a Kubernetes cluster.
 
 ## Prerequisites
 
@@ -14,9 +14,8 @@ This Helm chart deploys the Simple Vault application on a Kubernetes cluster.
 
 ```bash
 # Add your image registry if needed
-# Build and push images first:
+# Build and push the API image first:
 # docker build -t your-registry/simple-vault-api:latest ./api
-# docker build -t your-registry/simple-vault-ui:latest ./ui
 
 # Install with default values
 helm install simple-vault ./helm/simple-vault
@@ -79,17 +78,6 @@ The following table lists the configurable parameters and their default values:
 | `api.env.AUTH_SERVICE_URL` | Auth service URL | `http://192.168.1.4:8083` |
 | `api.resources` | API resource limits and requests | See values.yaml |
 
-### UI Configuration
-
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `ui.enabled` | Enable UI deployment | `true` |
-| `ui.image.repository` | UI image repository | `simple-vault-ui` |
-| `ui.image.tag` | UI image tag | `latest` |
-| `ui.replicaCount` | Number of UI replicas | `2` |
-| `ui.service.type` | UI service type | `ClusterIP` |
-| `ui.service.port` | UI service port | `80` |
-| `ui.resources` | UI resource limits and requests | See values.yaml |
 
 ### MongoDB Configuration
 
@@ -142,9 +130,6 @@ ingress:
   hosts:
     - host: vault.example.com
       paths:
-        - path: /
-          pathType: Prefix
-          service: ui
         - path: /api
           pathType: Prefix
           service: api
@@ -172,16 +157,6 @@ api:
       cpu: 200m
       memory: 256Mi
 
-ui:
-  replicaCount: 3
-  resources:
-    limits:
-      cpu: 500m
-      memory: 512Mi
-    requests:
-      cpu: 100m
-      memory: 128Mi
-
 mongodb:
   enabled: false  # Use external managed MongoDB
 
@@ -196,9 +171,6 @@ ingress:
   hosts:
     - host: vault.production.com
       paths:
-        - path: /
-          pathType: Prefix
-          service: ui
         - path: /api
           pathType: Prefix
           service: api
@@ -236,8 +208,6 @@ kubectl get pods -l app.kubernetes.io/name=simple-vault
 # API logs
 kubectl logs -l app.kubernetes.io/component=api
 
-# UI logs
-kubectl logs -l app.kubernetes.io/component=ui
 ```
 
 ### Check Services
@@ -252,13 +222,10 @@ kubectl get svc -l app.kubernetes.io/name=simple-vault
 # Forward API
 kubectl port-forward svc/simple-vault-api 8080:8080
 
-# Forward UI
-kubectl port-forward svc/simple-vault-ui 3000:80
 ```
 
 ## Notes
 
-- The UI build-time environment variable `VITE_API_URL` should be set during the Docker build process. The Helm chart assumes the image is already built with the correct API URL.
 - If using an external MongoDB, ensure the `vcluster` database and `users` collection exist, as the API queries this for user authentication.
 - The auth service URL should be accessible from within the Kubernetes cluster.
 

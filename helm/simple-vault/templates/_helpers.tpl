@@ -65,22 +65,6 @@ app.kubernetes.io/component: api
 {{- end }}
 
 {{/*
-UI labels
-*/}}
-{{- define "simple-vault.ui.labels" -}}
-{{ include "simple-vault.labels" . }}
-app.kubernetes.io/component: ui
-{{- end }}
-
-{{/*
-UI selector labels
-*/}}
-{{- define "simple-vault.ui.selectorLabels" -}}
-{{ include "simple-vault.selectorLabels" . }}
-app.kubernetes.io/component: ui
-{{- end }}
-
-{{/*
 Create the name of the service account to use
 */}}
 {{- define "simple-vault.serviceAccountName" -}}

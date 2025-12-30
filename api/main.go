@@ -34,6 +34,7 @@ type Secret struct {
 	UpdatedAt   time.Time         `bson:"updatedAt" json:"updatedAt"`
 }
 
+var mongoClient *mongo.Client
 var db *mongo.Database
 var secretsCollection *mongo.Collection
 var usersCollection *mongo.Collection
@@ -63,6 +64,9 @@ func initDB() error {
 	if err != nil {
 		return err
 	}
+
+	// Store client globally for health checks
+	mongoClient = client
 
 	// Ping the database to verify connection
 	err = client.Ping(ctx, nil)
@@ -194,6 +198,33 @@ func main() {
 		}
 
 		c.Next()
+	})
+
+	// Health check endpoint (no authentication required)
+	r.GET("/health", func(c *gin.Context) {
+		// Check database connection
+		if mongoClient == nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{
+				"status": "unhealthy",
+				"error":  "database client not initialized",
+			})
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+
+		if err := mongoClient.Ping(ctx, nil); err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{
+				"status": "unhealthy",
+				"error":  "database connection failed",
+			})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"status": "healthy",
+		})
 	})
 
 	// API routes with authentication middleware
