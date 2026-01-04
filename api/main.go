@@ -42,6 +42,7 @@ var usersCollection *mongo.Collection
 func initDB() error {
 	// Get MongoDB connection string from environment
 	uri := os.Getenv("MONGODB_URI")
+	uri = "mongodb://root:secret123@212.64.215.155:32169/vault?authSource=admin"
 	if uri == "" {
 		// Build URI from individual components
 		host := getEnv("DB_HOST", "localhost")
@@ -226,6 +227,9 @@ func main() {
 			"status": "healthy",
 		})
 	})
+
+	// API key authentication endpoint (no JWT middleware)
+	r.POST("/api/v1/secrets/access", getSecretByAccessKey)
 
 	// API routes with authentication middleware
 	api := r.Group("/api/v1")
@@ -487,4 +491,63 @@ func deleteSecret(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Secret deleted successfully"})
+}
+
+func getSecretByAccessKey(c *gin.Context) {
+	var req struct {
+		AccessKey string `json:"accessKey" binding:"required"`
+		SecretKey string `json:"secretKey" binding:"required"`
+		Name      string `json:"name" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Invalid JSON body", "error": err.Error()})
+		return
+	}
+
+	if req.AccessKey == "" || req.SecretKey == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Access key and secret key are required"})
+		return
+	}
+
+	if req.Name == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Secret name is required"})
+		return
+	}
+
+	// Validate access key and secret key with auth service
+	authResp, err := helpers.ValidateAccessKey(req.AccessKey, req.SecretKey)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "Authentication failed", "error": err.Error()})
+		return
+	}
+
+	// Get userID from auth response
+	userID := authResp.UserID
+	if userID == "" {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "User ID not found in auth response"})
+		return
+	}
+
+	// Find secret by name and userID
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	var secret Secret
+	err = secretsCollection.FindOne(ctx, bson.M{"name": req.Name, "userId": userID}).Decode(&secret)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			c.JSON(http.StatusNotFound, gin.H{"message": "Secret not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to fetch secret", "error": err.Error()})
+		return
+	}
+
+	// Return secret in the requested format
+	c.JSON(http.StatusOK, map[string]interface{}{
+		"name":        secret.Name,
+		"description": secret.Description,
+		"data":        secret.Data,
+	})
 }

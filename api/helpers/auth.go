@@ -89,3 +89,57 @@ func ValidateToken(token string) (string, error) {
 	return resp.Username, nil
 }
 
+type AccessKeyAuthRequest struct {
+	AccessKey string `json:"accessKey"`
+	SecretKey string `json:"secretKey"`
+}
+
+type AccessKeyAuthResponse struct {
+	Token    string `json:"token"`
+	UserID   string `json:"userID"`
+	Username string `json:"username"`
+	Email    string `json:"email"`
+	Message  string `json:"message"`
+}
+
+// ValidateAccessKey validates access key and secret key with the auth service
+func ValidateAccessKey(accessKey, secretKey string) (*AccessKeyAuthResponse, error) {
+	reqBody := AccessKeyAuthRequest{
+		AccessKey: accessKey,
+		SecretKey: secretKey,
+	}
+
+	jsonData, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	client := &http.Client{
+		Timeout: 5 * time.Second,
+	}
+
+	req, err := http.NewRequest("POST", AuthServiceURL+"/auth/apikey", bytes.NewBuffer(jsonData))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to call auth service: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("auth service returned error: %s - %s", resp.Status, string(body))
+	}
+
+	var authResp AccessKeyAuthResponse
+	if err := json.NewDecoder(resp.Body).Decode(&authResp); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return &authResp, nil
+}
