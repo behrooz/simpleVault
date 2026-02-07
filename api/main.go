@@ -9,12 +9,14 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 
 	"simple-vault/api/helpers"
+	"simple-vault/api/metrics"
 )
 
 type User struct {
@@ -180,6 +182,9 @@ func main() {
 
 	r := gin.Default()
 
+	// Prometheus metrics middleware (should be early in the chain)
+	r.Use(metrics.PrometheusMiddleware())
+
 	// Custom CORS middleware to ensure headers are always set
 	r.Use(func(c *gin.Context) {
 		origin := c.GetHeader("Origin")
@@ -200,6 +205,9 @@ func main() {
 
 		c.Next()
 	})
+
+	// Prometheus metrics endpoint (no authentication required)
+	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	// Health check endpoint (no authentication required)
 	r.GET("/health", func(c *gin.Context) {
