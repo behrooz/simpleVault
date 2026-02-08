@@ -44,7 +44,7 @@ jobs:
         run: |
           NAMESPACE="${K8S_NAMESPACE:-default}"
           DEPLOYMENT_NAME="${K8S_DEPLOYMENT_NAME:-simple-vault-api}"
-          CONTAINER_NAME="${K8S_CONTAINER_NAME:-simple-vault-api}"
+          CONTAINER_NAME="${K8S_CONTAINER_NAME:-api}"
           IMAGE_TAG="${{ github.run_number }}"
           IMAGE_NAME="212.64.215.155:30835/simple-vault-api:${IMAGE_TAG}"
           
