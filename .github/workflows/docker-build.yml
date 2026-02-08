@@ -25,7 +25,48 @@ jobs:
         with:
           context: api
           push: true
-          tags: 212.64.215.155:30835/authservice:latest
-          cache-from: type=registry,ref=212.64.215.155:30835/authservice:latest
+          tags: 212.64.215.155:30835/simple-vault-api:${{ github.run_number }}
+          cache-from: type=registry,ref=212.64.215.155:30835/simple-vault-api:latest
           cache-to: type=inline
 
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'latest'
+
+      - name: Configure kubectl
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBECONFIG }}" | base64 -d > $HOME/.kube/config
+          chmod 600 $HOME/.kube/config
+
+      - name: Update deployment image and rollout
+        run: |
+          NAMESPACE="${K8S_NAMESPACE:-default}"
+          DEPLOYMENT_NAME="${K8S_DEPLOYMENT_NAME:-simple-vault-api}"
+          CONTAINER_NAME="${K8S_CONTAINER_NAME:-simple-vault-api}"
+          IMAGE_TAG="${{ github.run_number }}"
+          IMAGE_NAME="212.64.215.155:30835/simple-vault-api:${IMAGE_TAG}"
+          
+          echo "Updating deployment ${DEPLOYMENT_NAME} in namespace ${NAMESPACE}"
+          echo "Container: ${CONTAINER_NAME}"
+          echo "New image: ${IMAGE_NAME}"
+          
+          # Update the deployment image
+          kubectl set image deployment/${DEPLOYMENT_NAME} \
+            ${CONTAINER_NAME}=${IMAGE_NAME} \
+            -n ${NAMESPACE}
+          
+          # Trigger rollout restart to ensure new pods are created
+          kubectl rollout restart deployment/${DEPLOYMENT_NAME} -n ${NAMESPACE}
+          
+          # Wait for rollout to complete
+          echo "Waiting for rollout to complete..."
+          kubectl rollout status deployment/${DEPLOYMENT_NAME} -n ${NAMESPACE} --timeout=5m
+          
+          echo "✅ Rollout completed successfully!"
+          echo "New image tag: ${IMAGE_TAG}"
+        env:
+          K8S_NAMESPACE: ${{ secrets.K8S_NAMESPACE || 'default' }}
+          K8S_DEPLOYMENT_NAME: ${{ secrets.K8S_DEPLOYMENT_NAME || 'simple-vault-api' }}
+          K8S_CONTAINER_NAME: ${{ secrets.K8S_CONTAINER_NAME || 'simple-vault-api' }}
