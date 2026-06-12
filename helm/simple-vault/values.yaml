@@ -10,7 +10,7 @@ global:
 api:
   enabled: true
   image:
-    repository: 212.64.215.155:30835/simple-vault-api
+    repository: 188.132.232.168:30724/simple-vault-api
     tag: latest
     pullPolicy: IfNotPresent
   

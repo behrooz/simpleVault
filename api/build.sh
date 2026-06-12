@@ -5,6 +5,6 @@
 export DOCKER_BUILDKIT=1
 
 # Build with cache
-docker build -t 212.64.215.155:30835/simple-vault-api:latest .
+docker build -t 188.132.232.168:30724/simple-vault-api:latest .
 
 echo "Build complete!"
