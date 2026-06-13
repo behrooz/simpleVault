@@ -23,7 +23,7 @@ jobs:
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
-          context: api
+          context: .
           push: true
           tags: 188.132.232.168:30724/simple-vault-api:${{ github.run_number }}
           cache-from: type=registry,ref=188.132.232.168:30724/simple-vault-api:latest
@@ -43,12 +43,9 @@ jobs:
       - name: Update deployment image and rollout
         run: |
           NAMESPACE="${K8S_NAMESPACE:-default}"
-          # DEPLOYMENT_NAME="${K8S_DEPLOYMENT_NAME:-simple-vault-api}"
-          DEPLOYMENT_NAME="simple-vault-api"
-          # CONTAINER_NAME="${K8S_CONTAINER_NAME:-simple-vault-api}"
-          CONTAINER_NAME="simple-vault-api"
-          #IMAGE_TAG="${{ github.run_number }}"
-          IMAGE_TAG="7"
+          DEPLOYMENT_NAME="${K8S_DEPLOYMENT_NAME:-simple-vault-api}"
+          CONTAINER_NAME="${K8S_CONTAINER_NAME:-simple-vault-api}"
+          IMAGE_TAG="${{ github.run_number }}"
           IMAGE_NAME="188.132.232.168:30724/simple-vault-api:${IMAGE_TAG}"
           
           echo "Updating deployment ${DEPLOYMENT_NAME} in namespace ${NAMESPACE}"
