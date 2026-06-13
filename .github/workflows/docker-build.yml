@@ -44,7 +44,9 @@ jobs:
         run: |
           NAMESPACE="${K8S_NAMESPACE:-default}"
           DEPLOYMENT_NAME="${K8S_DEPLOYMENT_NAME:-simple-vault-api}"
-          CONTAINER_NAME="${K8S_CONTAINER_NAME:-simple-vault-api}"
+          #CONTAINER_NAME="${K8S_CONTAINER_NAME:-simple-vault-api}"
+          CONTAINER_NAME=kubectl get deployment ${DEPLOYMENT_NAME} -n ${NAMESPACE} \ -o jsonpath='{.spec.template.spec.containers[*].name}'
+
           IMAGE_TAG="${{ github.run_number }}"
           IMAGE_NAME="188.132.232.168:30724/simple-vault-api:${IMAGE_TAG}"
           
