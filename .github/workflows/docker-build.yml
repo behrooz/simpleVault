@@ -23,7 +23,7 @@ jobs:
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
-          context: .
+          context: api
           push: true
           tags: 188.132.232.168:30724/simple-vault-api:${{ github.run_number }}
           cache-from: type=registry,ref=188.132.232.168:30724/simple-vault-api:latest
