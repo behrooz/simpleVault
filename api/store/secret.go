@@ -14,14 +14,14 @@ import (
 )
 
 type SecretDocument struct {
-	ID            primitive.ObjectID                 `bson:"_id,omitempty"`
-	Name          string                             `bson:"name"`
-	CustomerID    string                             `bson:"customer_id"`
-	SecretKey     string                             `bson:"secret_key"` // consider encrypting this too
-	EncryptedData map[string]*crypto.EncryptedSecret `bson:"encrypted_data"`
-	KEKVersion    int                                `bson:"kek_version"`
-	CreatedAt     time.Time                          `bson:"created_at"`
-	UpdatedAt     time.Time                          `bson:"updated_at"`
+	ID              primitive.ObjectID                 `bson:"_id,omitempty"`
+	CustomerID      string                             `bson:"customer_id"`
+	Name            string                             `bson:"name"`
+	Description     string                             `bson:"description"`
+	EncryptedFields map[string]*crypto.EncryptedSecret `bson:"encrypted_fields"` // 👈 this was missing
+	KEKVersion      int                                `bson:"kek_version"`
+	CreatedAt       time.Time                          `bson:"created_at"`
+	UpdatedAt       time.Time                          `bson:"updated_at"`
 }
 
 // CustomerKEKDocument stores the encrypted KEK per customer in a separate collection
@@ -64,14 +64,14 @@ func (s *SecretStore) SaveSecret(ctx context.Context, customerID, name, descript
 	return err
 }
 
-func (s *SecretStore) GetSecret(ctx context.Context, customerID, secretKey string) (*SecretDocument, error) {
+func (s *SecretStore) GetSecret(ctx context.Context, customerID, name string) (*SecretDocument, error) {
 	var doc SecretDocument
 	err := s.secrets.FindOne(ctx, bson.M{
 		"customer_id": customerID,
-		"secret_key":  secretKey,
+		"name":        name, // was "secret_key" — matches the bson tag in SecretDocument
 	}).Decode(&doc)
 	if err != nil {
-		return nil, fmt.Errorf("secret not found: %w", err)
+		return nil, fmt.Errorf("failed to fetch secret: %w", err)
 	}
 	return &doc, nil
 }

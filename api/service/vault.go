@@ -61,22 +61,30 @@ func (v *VaultService) SaveSecret(ctx context.Context, customerID, name, descrip
 }
 
 // GetSecret fetches and decrypts a customer's secret.
-func (v *VaultService) GetSecret(ctx context.Context, customerID, key string) (string, error) {
-	// 1. Fetch the encrypted record
-	doc, err := v.store.GetSecret(ctx, customerID, key)
+// GetSecret decrypts and returns all fields of a secret group
+func (v *VaultService) GetSecret(ctx context.Context, customerID, name string) (map[string]string, error) {
+	doc, err := v.store.GetSecret(ctx, customerID, name)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
-	// 2. Fetch and decrypt the KEK used at the time of encryption
 	kek, err := v.getCustomerKEK(ctx, customerID, doc.KEKVersion)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	defer crypto.Zeroize(kek)
 
-	// 3. Decrypt and return — plaintext never touches MongoDB
-	return crypto.DecryptSecret(&doc.EncryptedData, kek)
+	// Decrypt each field
+	result := make(map[string]string, len(doc.EncryptedFields))
+	for fieldKey, encryptedField := range doc.EncryptedFields {
+		plaintext, err := crypto.DecryptSecret(encryptedField, kek)
+		if err != nil {
+			return nil, fmt.Errorf("failed to decrypt field %q: %w", fieldKey, err)
+		}
+		result[fieldKey] = plaintext
+	}
+
+	return result, nil
 }
 
 func (v *VaultService) getCustomerKEK(ctx context.Context, customerID string, version int) ([]byte, error) {
