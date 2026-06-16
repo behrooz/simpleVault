@@ -14,13 +14,14 @@ import (
 )
 
 type SecretDocument struct {
-	ID            primitive.ObjectID     `bson:"_id,omitempty"`
-	CustomerID    string                 `bson:"customer_id"`
-	SecretKey     string                 `bson:"secret_key"` // consider encrypting this too
-	EncryptedData crypto.EncryptedSecret `bson:"encrypted_data"`
-	KEKVersion    int                    `bson:"kek_version"`
-	CreatedAt     time.Time              `bson:"created_at"`
-	UpdatedAt     time.Time              `bson:"updated_at"`
+	ID            primitive.ObjectID                 `bson:"_id,omitempty"`
+	Name          string                             `bson:"name"`
+	CustomerID    string                             `bson:"customer_id"`
+	SecretKey     string                             `bson:"secret_key"` // consider encrypting this too
+	EncryptedData map[string]*crypto.EncryptedSecret `bson:"encrypted_data"`
+	KEKVersion    int                                `bson:"kek_version"`
+	CreatedAt     time.Time                          `bson:"created_at"`
+	UpdatedAt     time.Time                          `bson:"updated_at"`
 }
 
 // CustomerKEKDocument stores the encrypted KEK per customer in a separate collection
@@ -44,22 +45,22 @@ func NewSecretStore(db *mongo.Database) *SecretStore {
 	}
 }
 
-func (s *SecretStore) SaveSecret(ctx context.Context, customerID, secretKey string, encrypted *crypto.EncryptedSecret, kekVersion int) error {
-	filter := bson.M{"customer_id": customerID, "secret_key": secretKey}
+func (s *SecretStore) SaveSecret(ctx context.Context, customerID, name, description string, fields map[string]*crypto.EncryptedSecret, kekVersion int) error {
+	filter := bson.M{"customer_id": customerID, "name": name}
 	update := bson.M{
 		"$set": bson.M{
-			"encrypted_data": encrypted,
-			"kek_version":    kekVersion,
-			"updated_at":     time.Now(),
+			"encrypted_fields": fields,
+			"description":      description,
+			"kek_version":      kekVersion,
+			"updated_at":       time.Now(),
 		},
 		"$setOnInsert": bson.M{
 			"customer_id": customerID,
-			"secret_key":  secretKey,
+			"name":        name,
 			"created_at":  time.Now(),
 		},
 	}
-	opts := options.Update().SetUpsert(true)
-	_, err := s.secrets.UpdateOne(ctx, filter, update, opts)
+	_, err := s.secrets.UpdateOne(ctx, filter, update, options.Update().SetUpsert(true))
 	return err
 }
 

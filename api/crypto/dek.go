@@ -19,7 +19,7 @@ func EncryptSecret(plaintextValue string, kek []byte) (*EncryptedSecret, error) 
 	if _, err := io.ReadFull(rand.Reader, dek); err != nil {
 		return nil, fmt.Errorf("failed to generate DEK: %w", err)
 	}
-	defer zeroize(dek) // wipe DEK from memory after we're done
+	defer Zeroize(dek) // wipe DEK from memory after we're done
 
 	// 2. Encrypt the secret value with the DEK
 	encryptedValue, iv, authTag, err := aesGCMEncrypt(dek, []byte(plaintextValue))
@@ -50,7 +50,7 @@ func DecryptSecret(es *EncryptedSecret, kek []byte) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to decrypt DEK: %w", err)
 	}
-	defer zeroize(dek)
+	defer Zeroize(dek)
 
 	// 2. Decrypt the secret value using the DEK
 	plaintext, err := aesGCMDecrypt(dek, es.EncryptedValue, es.IV, es.AuthTag)
@@ -147,8 +147,8 @@ func aesGCMDecrypt(key []byte, ciphertextB64, ivB64, authTagB64 string) ([]byte,
 	return gcm.Open(nil, iv, combined, nil)
 }
 
-// zeroize wipes a byte slice from memory after use
-func zeroize(b []byte) {
+// Zeroize wipes a byte slice from memory after use
+func Zeroize(b []byte) {
 	for i := range b {
 		b[i] = 0
 	}

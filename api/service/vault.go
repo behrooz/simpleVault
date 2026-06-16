@@ -34,7 +34,7 @@ func (v *VaultService) ProvisionCustomer(ctx context.Context, customerID string)
 }
 
 // SaveSecret encrypts and stores a customer's secret.
-func (v *VaultService) SaveSecret(ctx context.Context, customerID, key, value string) error {
+func (v *VaultService) SaveSecret(ctx context.Context, customerID, name, description string, data map[string]string) error {
 	// 1. Fetch and decrypt the customer's KEK
 	kek, err := v.getCustomerKEK(ctx, customerID, v.kekVersion)
 	if err != nil {
@@ -43,13 +43,21 @@ func (v *VaultService) SaveSecret(ctx context.Context, customerID, key, value st
 	defer crypto.Zeroize(kek) // wipe from memory after use
 
 	// 2. Encrypt the secret value
-	encrypted, err := crypto.EncryptSecret(value, kek)
+	encryptedFields := make(map[string]*crypto.EncryptedSecret, len(data))
+	for fieldKey, filedvalue := range data {
+		encrypted, err := crypto.EncryptSecret(filedvalue, kek)
+		if err != nil {
+			return fmt.Errorf("encryption failed: %w", fieldKey, err)
+		}
+		encryptedFields[fieldKey] = encrypted
+	}
+
 	if err != nil {
 		return fmt.Errorf("encryption failed: %w", err)
 	}
 
 	// 3. Persist to MongoDB — only ciphertext is stored
-	return v.store.SaveSecret(ctx, customerID, key, encrypted, v.kekVersion)
+	return v.store.SaveSecret(ctx, customerID, name, description, encryptedFields, v.kekVersion)
 }
 
 // GetSecret fetches and decrypts a customer's secret.

@@ -43,6 +43,7 @@ var mongoClient *mongo.Client
 var db *mongo.Database
 var secretsCollection *mongo.Collection
 var usersCollection *mongo.Collection
+var vaultSvc *service.VaultService
 
 func initDB() error {
 	// Get MongoDB connection string from environment
@@ -189,7 +190,7 @@ func main() {
 	}
 
 	secretStore := store.NewSecretStore(db)
-	vaultSvc := service.NewVaultService(rootKey, secretStore)
+	vaultSvc = service.NewVaultService(rootKey, secretStore)
 
 	r := gin.Default()
 
@@ -389,14 +390,22 @@ func createSecret(c *gin.Context) {
 		UpdatedAt:   now,
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	_, err := secretsCollection.InsertOne(ctx, secret)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create secret: " + err.Error()})
-		return
+	if err := vaultSvc.ProvisionCustomer(context.Background(), userIDStr); err != nil {
+		log.Fatalf(err.Error())
 	}
+
+	if err := vaultSvc.SaveSecret(context.Background(), userIDStr, req.Name, req.Description, req.Data); err != nil {
+		log.Fatalf(err.Error())
+	}
+
+	// ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	// defer cancel()
+
+	//_, err := secretsCollection.InsertOne(ctx, secret)
+	// if err != nil {
+	// 	c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create secret: " + err.Error()})
+	// 	return
+	// }
 
 	c.JSON(http.StatusCreated, map[string]interface{}{
 		"id":          secret.ID,
