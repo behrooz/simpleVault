@@ -15,8 +15,11 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 
+	"simple-vault/api/crypto"
 	"simple-vault/api/helpers"
 	"simple-vault/api/metrics"
+	"simple-vault/api/service"
+	"simple-vault/api/store"
 )
 
 type User struct {
@@ -176,9 +179,17 @@ func authMiddleware() gin.HandlerFunc {
 
 func main() {
 	// Initialize database
+	rootKey, err := crypto.NewRootKeyManager()
+	if err != nil {
+		log.Fatalf("failed to init root key manager: %v", err)
+	}
+
 	if err := initDB(); err != nil {
 		log.Fatalf("Failed to initialize database: %v", err)
 	}
+
+	secretStore := store.NewSecretStore(db)
+	vaultSvc := service.NewVaultService(rootKey, secretStore)
 
 	r := gin.Default()
 

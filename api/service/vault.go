@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"yourmodule/crypto"
-	"yourmodule/store"
+	"simple-vault/api/crypto"
+	"simple-vault/api/store"
 )
 
 type VaultService struct {
