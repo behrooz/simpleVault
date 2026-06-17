@@ -102,3 +102,26 @@ func (s *SecretStore) GetCustomerKEK(ctx context.Context, customerID string, ver
 	}
 	return &doc, nil
 }
+
+func (s *SecretStore) UpdateSecret(ctx context.Context, customerID string, id primitive.ObjectID, name, description string, fields map[string]*crypto.EncryptedSecret, kekVersion int) error {
+	result, err := s.secrets.UpdateOne(ctx,
+		bson.M{
+			"_id":         id,
+			"customer_id": customerID, // ownership check at DB level too
+		},
+		bson.M{"$set": bson.M{
+			"name":             name,
+			"description":      description,
+			"encrypted_fields": fields,
+			"kek_version":      kekVersion,
+			"updated_at":       time.Now(),
+		}},
+	)
+	if err != nil {
+		return fmt.Errorf("failed to update secret: %w", err)
+	}
+	if result.MatchedCount == 0 {
+		return fmt.Errorf("secret not found or access denied")
+	}
+	return nil
+}

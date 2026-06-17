@@ -6,6 +6,8 @@ import (
 
 	"simple-vault/api/crypto"
 	"simple-vault/api/store"
+
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 type VaultService struct {
@@ -60,21 +62,11 @@ func (v *VaultService) SaveSecret(ctx context.Context, customerID, name, descrip
 	return v.store.SaveSecret(ctx, customerID, name, description, encryptedFields, v.kekVersion)
 }
 
-// GetSecret fetches and decrypts a customer's secret.
 // GetSecret decrypts and returns all fields of a secret group
-func (v *VaultService) GetSecret(ctx context.Context, customerID string) (*store.SecretDocument, error) {
-	doc, err := v.store.GetSecret(ctx, customerID, "")
-	if err != nil {
-		return nil, nil
-	}
-
-	return doc, nil
-}
-
-func (v *VaultService) GetSecretOn(ctx context.Context, customerID, name string) (map[string]string, error) {
+func (v *VaultService) GetSecret(ctx context.Context, customerID, name string) (map[string]string, error) {
 	doc, err := v.store.GetSecret(ctx, customerID, name)
 	if err != nil {
-		return nil, nil
+		return nil, err
 	}
 
 	kek, err := v.getCustomerKEK(ctx, customerID, doc.KEKVersion)
@@ -86,12 +78,9 @@ func (v *VaultService) GetSecretOn(ctx context.Context, customerID, name string)
 	// Decrypt each field
 	result := make(map[string]string, len(doc.EncryptedFields))
 	for fieldKey, encryptedField := range doc.EncryptedFields {
-		plaintext := ""
-		if name != "" {
-			plaintext, err = crypto.DecryptSecret(encryptedField, kek)
-			if err != nil {
-				return nil, fmt.Errorf("failed to decrypt field %q: %w", fieldKey, err)
-			}
+		plaintext, err := crypto.DecryptSecret(encryptedField, kek)
+		if err != nil {
+			return nil, fmt.Errorf("failed to decrypt field %q: %w", fieldKey, err)
 		}
 		result[fieldKey] = plaintext
 	}
@@ -111,4 +100,25 @@ func (v *VaultService) getCustomerKEK(ctx context.Context, customerID string, ve
 	}
 
 	return kek, nil
+}
+
+func (v *VaultService) UpdateSecret(ctx context.Context, customerID string, id primitive.ObjectID, name, description string, data map[string]string) error {
+	// Fetch and decrypt KEK once
+	kek, err := v.getCustomerKEK(ctx, customerID, v.kekVersion)
+	if err != nil {
+		return err
+	}
+	defer crypto.Zeroize(kek)
+
+	// Re-encrypt every field fresh — new DEK per field
+	encryptedFields := make(map[string]*crypto.EncryptedSecret, len(data))
+	for fieldKey, fieldValue := range data {
+		encrypted, err := crypto.EncryptSecret(fieldValue, kek)
+		if err != nil {
+			return fmt.Errorf("failed to encrypt field %q: %w", fieldKey, err)
+		}
+		encryptedFields[fieldKey] = encrypted
+	}
+
+	return v.store.UpdateSecret(ctx, customerID, id, name, description, encryptedFields, v.kekVersion)
 }

@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"os"
@@ -422,19 +424,17 @@ func createSecret(c *gin.Context) {
 func updateSecret(c *gin.Context) {
 	id := c.Param("id")
 
-	// Get userID from context (set by authMiddleware)
 	userID, exists := c.Get("userID")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User ID not found in context"})
 		return
 	}
-
 	userIDStr := userID.(string)
 
 	var req struct {
-		Name        string            `json:"name" binding:"required"`
-		Description string            `json:"description"`
-		Data        map[string]string `json:"data" binding:"required"`
+		Name        string                     `json:"name"        binding:"required"`
+		Description string                     `json:"description"`
+		RawData     map[string]json.RawMessage `json:"data"        binding:"required"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -442,54 +442,58 @@ func updateSecret(c *gin.Context) {
 		return
 	}
 
+	// Extract only plain string values — skip any encrypted objects the frontend sends back
+	data := make(map[string]string)
+	for k, v := range req.RawData {
+		var s string
+		if err := json.Unmarshal(v, &s); err == nil {
+			// It's a plain string — use it
+			data[k] = s
+		}
+		// If it's an object (old encrypted struct), skip it silently
+		// The frontend should not be sending these back
+	}
+
+	if len(data) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "data must contain at least one plain string value"})
+		return
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	// Check if secret exists and belongs to user
-	var existing Secret
-	err := secretsCollection.FindOne(ctx, bson.M{"_id": id, "userId": userIDStr}).Decode(&existing)
+	// Convert string ID to ObjectID
+	objID, err := primitive.ObjectIDFromHex(id)
 	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			c.JSON(http.StatusNotFound, gin.H{"error": "Secret not found"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid secret ID"})
+		return
+	}
+
+	// Verify the secret exists and belongs to this user
+	var existing store.SecretDocument
+	err = secretsCollection.FindOne(ctx, bson.M{
+		"_id":         objID,
+		"customer_id": userIDStr,
+	}).Decode(&existing)
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "secret not found"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch secret: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch secret"})
 		return
 	}
 
-	// Update secret (only if it belongs to the user)
-	update := bson.M{
-		"$set": bson.M{
-			"name":        req.Name,
-			"description": req.Description,
-			"data":        req.Data,
-			"updatedAt":   time.Now(),
-		},
-	}
-
-	result, err := secretsCollection.UpdateOne(ctx, bson.M{"_id": id, "userId": userIDStr}, update)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update secret: " + err.Error()})
+	// Re-encrypt all fields through the vault service
+	if err := vaultSvc.UpdateSecret(ctx, userIDStr, objID, req.Name, req.Description, data); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update secret"})
 		return
 	}
 
-	if result.MatchedCount == 0 {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Secret not found"})
-		return
-	}
-
-	// Fetch updated secret
-	var updated Secret
-	secretsCollection.FindOne(ctx, bson.M{"_id": id, "userId": userIDStr}).Decode(&updated)
-
-	c.JSON(http.StatusOK, map[string]interface{}{
-		"id":          updated.ID,
-		"userId":      updated.UserID,
-		"name":        updated.Name,
-		"description": updated.Description,
-		"data":        updated.Data,
-		"createdAt":   updated.CreatedAt.Format(time.RFC3339),
-		"updatedAt":   updated.UpdatedAt.Format(time.RFC3339),
+	c.JSON(http.StatusOK, gin.H{
+		"id":      id,
+		"name":    req.Name,
+		"updated": true,
 	})
 }
 
