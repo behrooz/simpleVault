@@ -448,6 +448,15 @@ func updateSecret(c *gin.Context) {
 		var s string
 		if err := json.Unmarshal(v, &s); err == nil {
 			// It's a plain string — use it
+			if s == "" {
+				v, ererr := vaultSvc.GetSecret(context.Background(), userIDStr, req.Name)
+				if ererr != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch secret for update: " + ererr.Error()})
+					return
+				}
+				s = v[k]
+			}
+
 			data[k] = s
 		}
 		// If it's an object (old encrypted struct), skip it silently
