@@ -517,11 +517,19 @@ func deleteSecret(c *gin.Context) {
 	}
 
 	userIDStr := userID.(string)
+
+	// Convert string ID to ObjectID
+	objID, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid secret ID"})
+		return
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	// Delete secret only if it belongs to the user
-	result, err := secretsCollection.DeleteOne(ctx, bson.M{"_id": id, "userId": userIDStr})
+	result, err := secretsCollection.DeleteOne(ctx, bson.M{"_id": objID, "customer_id": userIDStr})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete secret: " + err.Error()})
 		return
