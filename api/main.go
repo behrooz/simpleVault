@@ -291,7 +291,7 @@ func getSecrets(c *gin.Context) {
 	defer cancel()
 
 	// Filter secrets by userID
-	filter := bson.M{"userId": userIDStr}
+	filter := bson.M{"customer_id": userIDStr}
 	cursor, err := secretsCollection.Find(ctx, filter)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch secrets: " + err.Error()})
@@ -299,7 +299,8 @@ func getSecrets(c *gin.Context) {
 	}
 	defer cursor.Close(ctx)
 
-	var secrets []Secret
+	var secrets []*store.SecretDocument
+
 	if err = cursor.All(ctx, &secrets); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to decode secrets: " + err.Error()})
 		return
@@ -310,10 +311,10 @@ func getSecrets(c *gin.Context) {
 	for i, secret := range secrets {
 		result[i] = map[string]interface{}{
 			"id":          secret.ID,
-			"userId":      secret.UserID,
+			"userId":      secret.CustomerID,
 			"name":        secret.Name,
 			"description": secret.Description,
-			"data":        secret.Data,
+			"data":        secret.EncryptedFields,
 			"createdAt":   secret.CreatedAt.Format(time.RFC3339),
 			"updatedAt":   secret.UpdatedAt.Format(time.RFC3339),
 		}

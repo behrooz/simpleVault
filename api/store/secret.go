@@ -66,10 +66,14 @@ func (s *SecretStore) SaveSecret(ctx context.Context, customerID, name, descript
 
 func (s *SecretStore) GetSecret(ctx context.Context, customerID, name string) (*SecretDocument, error) {
 	var doc SecretDocument
-	err := s.secrets.FindOne(ctx, bson.M{
+	filter := bson.M{
 		"customer_id": customerID,
-		"name":        name, // was "secret_key" — matches the bson tag in SecretDocument
-	}).Decode(&doc)
+	}
+
+	if name != "" {
+		filter["name"] = name
+	}
+	err := s.secrets.FindOne(ctx, filter).Decode(&doc)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch secret: %w", err)
 	}

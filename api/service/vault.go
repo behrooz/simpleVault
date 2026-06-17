@@ -62,10 +62,19 @@ func (v *VaultService) SaveSecret(ctx context.Context, customerID, name, descrip
 
 // GetSecret fetches and decrypts a customer's secret.
 // GetSecret decrypts and returns all fields of a secret group
-func (v *VaultService) GetSecret(ctx context.Context, customerID, name string) (map[string]string, error) {
+func (v *VaultService) GetSecret(ctx context.Context, customerID string) (*store.SecretDocument, error) {
+	doc, err := v.store.GetSecret(ctx, customerID, "")
+	if err != nil {
+		return nil, nil
+	}
+
+	return doc, nil
+}
+
+func (v *VaultService) GetSecretOn(ctx context.Context, customerID, name string) (map[string]string, error) {
 	doc, err := v.store.GetSecret(ctx, customerID, name)
 	if err != nil {
-		return nil, err
+		return nil, nil
 	}
 
 	kek, err := v.getCustomerKEK(ctx, customerID, doc.KEKVersion)
@@ -77,9 +86,12 @@ func (v *VaultService) GetSecret(ctx context.Context, customerID, name string) (
 	// Decrypt each field
 	result := make(map[string]string, len(doc.EncryptedFields))
 	for fieldKey, encryptedField := range doc.EncryptedFields {
-		plaintext, err := crypto.DecryptSecret(encryptedField, kek)
-		if err != nil {
-			return nil, fmt.Errorf("failed to decrypt field %q: %w", fieldKey, err)
+		plaintext := ""
+		if name != "" {
+			plaintext, err = crypto.DecryptSecret(encryptedField, kek)
+			if err != nil {
+				return nil, fmt.Errorf("failed to decrypt field %q: %w", fieldKey, err)
+			}
 		}
 		result[fieldKey] = plaintext
 	}

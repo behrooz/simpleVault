@@ -14,21 +14,22 @@ import (
 // then wraps the DEK with the customer's KEK.
 // Returns an EncryptedSecret ready to be stored in MongoDB.
 func EncryptSecret(plaintextValue string, kek []byte) (*EncryptedSecret, error) {
-	// 1. Generate a random DEK (one per secret)
+	// 1. Generate a random DEK
 	dek := make([]byte, 32)
 	if _, err := io.ReadFull(rand.Reader, dek); err != nil {
 		return nil, fmt.Errorf("failed to generate DEK: %w", err)
 	}
-	defer Zeroize(dek) // wipe DEK from memory after we're done
+	defer Zeroize(dek)
 
-	// 2. Encrypt the secret value with the DEK
+	// 2. Encrypt the secret value with the DEK (separate IV + authTag storage)
 	encryptedValue, iv, authTag, err := aesGCMEncrypt(dek, []byte(plaintextValue))
 	if err != nil {
 		return nil, fmt.Errorf("failed to encrypt secret value: %w", err)
 	}
 
-	// 3. Encrypt the DEK with the customer KEK
-	encryptedDEK, _, _, err := aesGCMEncrypt(kek, dek)
+	// 3. Encrypt the DEK with KEK using concatenated format (iv+ciphertext+tag)
+	//    so DecryptSecret can call aesGCMDecrypt(kek, encryptedDEK, "", "")
+	encryptedDEK, err := aesGCMEncryptConcatenated(kek, dek)
 	if err != nil {
 		return nil, fmt.Errorf("failed to encrypt DEK: %w", err)
 	}
@@ -40,6 +41,26 @@ func EncryptSecret(plaintextValue string, kek []byte) (*EncryptedSecret, error) 
 		AuthTag:        authTag,
 		Algorithm:      "AES-256-GCM",
 	}, nil
+}
+
+// aesGCMEncryptConcatenated encrypts and returns base64(iv + ciphertext + tag) in one blob.
+// Used for DEK encryption — matches the decryption path when IV is passed as "".
+func aesGCMEncryptConcatenated(key, plaintext []byte) (string, error) {
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return "", err
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return "", err
+	}
+	iv := make([]byte, gcm.NonceSize())
+	if _, err = io.ReadFull(rand.Reader, iv); err != nil {
+		return "", err
+	}
+	// Seal appends ciphertext+tag to iv
+	sealed := gcm.Seal(iv, iv, plaintext, nil)
+	return base64.StdEncoding.EncodeToString(sealed), nil
 }
 
 // DecryptSecret reverses the process: unwraps the DEK using the KEK, then
