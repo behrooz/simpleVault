@@ -260,7 +260,7 @@ func main() {
 		// Get all secrets
 		api.GET("/secrets", getSecrets)
 		// Get a specific secret
-		api.GET("/secrets/:id", getSecret)
+		api.GET("/secrets/:name", getSecret)
 		// Create a new secret
 		api.POST("/secrets", createSecret)
 		// Update a secret
@@ -326,39 +326,28 @@ func getSecrets(c *gin.Context) {
 }
 
 func getSecret(c *gin.Context) {
-	id := c.Param("id")
+	name := c.Param("name") // GET /api/v1/secrets/:name
 
-	// Get userID from context (set by authMiddleware)
 	userID, exists := c.Get("userID")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User ID not found in context"})
 		return
 	}
-
 	userIDStr := userID.(string)
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	// Find secret by ID and userID to ensure ownership
-	var secret Secret
-	err := secretsCollection.FindOne(ctx, bson.M{"_id": id, "userId": userIDStr}).Decode(&secret)
+	// Decrypt all fields via vault service
+	decryptedData, err := vaultSvc.GetSecret(ctx, userIDStr, name)
 	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			c.JSON(http.StatusNotFound, gin.H{"error": "Secret not found"})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch secret: " + err.Error()})
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, map[string]interface{}{
-		"id":          secret.ID,
-		"userId":      secret.UserID,
-		"name":        secret.Name,
-		"description": secret.Description,
-		"data":        secret.Data,
-		"createdAt":   secret.CreatedAt.Format(time.RFC3339),
-		"updatedAt":   secret.UpdatedAt.Format(time.RFC3339),
+	c.JSON(http.StatusOK, gin.H{
+		"name": name,
+		"data": decryptedData, // map[string]string{"A":"123", "DBNAME":"mydbname", ...}
 	})
 }
 
