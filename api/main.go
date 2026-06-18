@@ -260,7 +260,7 @@ func main() {
 		// Get all secrets
 		api.GET("/secrets", getSecrets)
 		// Get a specific secret
-		api.GET("/secrets/:name", getSecret)
+		api.POST("/secrets/:name", getSecret)
 		// Create a new secret
 		api.POST("/secrets", createSecret)
 		// Update a secret
@@ -568,25 +568,22 @@ func getSecretByAccessKey(c *gin.Context) {
 		return
 	}
 
-	// Find secret by name and userID
+	name := req.Name
+	//userIDStr := userID.(string)
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	var secret Secret
-	err = secretsCollection.FindOne(ctx, bson.M{"name": req.Name, "userId": userID}).Decode(&secret)
+	// Decrypt all fields via vault service
+	decryptedData, err := vaultSvc.GetSecret(ctx, userID, name)
 	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			c.JSON(http.StatusNotFound, gin.H{"message": "Secret not found"})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to fetch secret", "error": err.Error()})
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
 
-	// Return secret in the requested format
-	c.JSON(http.StatusOK, map[string]interface{}{
-		"name":        secret.Name,
-		"description": secret.Description,
-		"data":        secret.Data,
+	c.JSON(http.StatusOK, gin.H{
+		"name": name,
+		"data": decryptedData, // map[string]string{"A":"123", "DBNAME":"mydbname", ...}
 	})
+
 }
