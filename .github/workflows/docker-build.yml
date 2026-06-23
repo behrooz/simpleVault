@@ -16,7 +16,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
         with:
           config-inline: |
-            [registry."188.132.232.168:30724"]
+            [registry."188.132.232.168:30836"]
               http = true
               insecure = true              
 
@@ -25,8 +25,8 @@ jobs:
         with:
           context: api
           push: true
-          tags: 188.132.232.168:30724/simple-vault-api:${{ github.run_number }}
-          cache-from: type=registry,ref=188.132.232.168:30724/simple-vault-api:latest
+          tags: 188.132.232.168:30836/simple-vault-api:${{ github.run_number }}
+          cache-from: type=registry,ref=188.132.232.168:30836/simple-vault-api:latest
           cache-to: type=inline
 
       - name: Set up kubectl
@@ -51,7 +51,7 @@ jobs:
             -o jsonpath='{.spec.template.spec.containers[0].name}')
 
           IMAGE_TAG="${{ github.run_number }}"
-          IMAGE_NAME="188.132.232.168:30724/simple-vault-api:${IMAGE_TAG}"
+          IMAGE_NAME="188.132.232.168:30836/simple-vault-api:${IMAGE_TAG}"
           
           echo "Updating deployment ${DEPLOYMENT_NAME} in namespace ${NAMESPACE}"
           echo "Container: ${CONTAINER_NAME}"
